@@ -223,7 +223,7 @@ post fixture route body headers = send fixture "POST" route headers body
 send :: Fixture -> String -> String -> Array Header -> String -> Aff ClientResponse
 send fixture method route headers body = do
   let request = (HTTP.clientRequest (Method method) (URL (fixture.baseUrl <> route))) { headers = headers, body = body }
-  HTTP.sendAff request >>= either (liftEffect <<< throw <<< show) pure
+  HTTP.send request >>= either (liftEffect <<< throw <<< show) pure
 
 contentType :: String -> Header
 contentType value = { name: HeaderName "Content-Type", value: HeaderValue value }
