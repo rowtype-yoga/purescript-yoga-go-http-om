@@ -34,6 +34,7 @@ import Effect.Exception (error)
 import Foreign (Foreign, isNull, isUndefined, typeOf, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object)
 import Foreign.Object as Object
+import Go.IO (IO)
 import Yoga.JSON (unsafeStringify)
 
 -- | The route table and, once listening, the Go `http.Server`.
@@ -129,7 +130,9 @@ addRoute :: String -> String -> BodyKind -> (RequestHandle -> Aff Unit) -> Serve
 addRoute method path bodyKind handler server =
   addRouteImpl method path (bodyKindName bodyKind) run server
   where
-  run request finished = launchAff_ do
+  run request finished = handled request finished # liftEffect
+
+  handled request finished = launchAff_ do
     result <- attempt (handler request)
     liftEffect do
       either (\_ -> sendFailureImpl request) pure result
@@ -191,7 +194,7 @@ repeated names values = Object.fromFoldable (Array.zipWith entry names values)
     several -> name /\ unsafeToForeign several
 
 foreign import createServerImpl :: Int -> Number -> Number -> Number -> Server
-foreign import addRouteImpl :: String -> String -> String -> (RequestHandle -> Effect Unit -> Effect Unit) -> Server -> Effect Unit
+foreign import addRouteImpl :: String -> String -> String -> (RequestHandle -> Effect Unit -> IO Unit) -> Server -> Effect Unit
 foreign import listenImpl :: forall r. (String -> r) -> (BoundAddress -> r) -> String -> Int -> Server -> Effect r
 foreign import closeImpl :: Server -> Effect Unit -> Effect Unit
 foreign import pathNamesImpl :: RequestHandle -> Array String

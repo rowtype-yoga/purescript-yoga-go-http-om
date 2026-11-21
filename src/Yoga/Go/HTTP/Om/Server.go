@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/i-am-the-slime/iris-go/aff"
+	"github.com/i-am-the-slime/iris-go/eventloop"
 	"github.com/i-am-the-slime/iris-go/exception"
 )
 
@@ -110,21 +110,21 @@ func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host s
 		ReadTimeout:       s.requestTimeout,
 		IdleTimeout:       s.keepAlive,
 	}
-	s.retire = aff.Hold()
+	s.retire = eventloop.Hold()
 	go s.http.Serve(listener)
 	address := listener.Addr().(*net.TCPAddr)
 	return bound(BoundAddress{Address: address.IP.String(), Port: int32(address.Port)})
 }
 
-// CloseImpl stops accepting connections, waits for the requests in flight, and then calls
-// finished on the event loop.
+// CloseImpl stops accepting connections, waits for the requests in flight, and then resumes the
+// fiber.
 func CloseImpl(s *server, finished func()) {
-	retire := aff.Hold()
+	retire := eventloop.Hold()
 	go func() {
 		if s.http != nil {
 			s.http.Shutdown(context.Background())
 		}
-		aff.Exclusive(finished)
+		finished()
 		s.stopped.Do(func() {
 			if s.retire != nil {
 				s.retire()
@@ -220,7 +220,7 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	done := make(chan struct{})
-	aff.Exclusive(func() { selected.route.handler(h)(func() { close(done) }) })
+	selected.route.handler(h)(func() { close(done) })
 	<-done
 	if !h.sent {
 		plain(writer, http.StatusInternalServerError, "Internal Server Error")

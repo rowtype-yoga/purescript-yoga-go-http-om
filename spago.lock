@@ -36,6 +36,9 @@
               "foreign-object": ">=4.1.1 <5.0.0"
             },
             {
+              "golang": "*"
+            },
+            {
               "maybe": ">=6.0.1 <7.0.0"
             },
             {
@@ -519,14 +522,20 @@
       "dependencies": [
         "aff",
         "arrays",
+        "bifunctors",
+        "control",
         "datetime",
         "effect",
         "either",
         "exceptions",
+        "foldable-traversable",
         "maybe",
         "newtype",
+        "parallel",
         "partial",
         "prelude",
+        "tailrec",
+        "transformers",
         "tuples"
       ]
     },
