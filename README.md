@@ -92,6 +92,24 @@ The catch: once `Aff` is in the program, PureScript runs one piece at a time, li
 Other requests still keep going while a handler waits, and a `Ref` behaves the way you're used to,
 but you're down to one core.
 
+## How fast?
+
+About as fast as writing it by hand. I pointed [oha](https://github.com/hatoo/oha) at the example and
+at two hand-written `net/http` servers answering the same route: one using `encoding/json`, one
+writing pre-baked bytes. Loopback, M5 Max with 18 cores, median of three 10 second runs:
+
+| Server | `/users/42`, 50 connections | `/users/42`, 200 connections | `/users/7` (404), 200 connections |
+| --- | ---: | ---: | ---: |
+| this library | 108,017 req/s | 131,607 req/s | 131,980 req/s |
+| hand-written, `encoding/json` | 120,337 req/s | 133,612 req/s | 133,268 req/s |
+| hand-written, bytes | 121,387 req/s | 133,266 req/s | 133,058 req/s |
+
+p99 latency at 200 connections is 3.1 ms here against 2.6 to 2.7 ms by hand. Run it yourself with
+
+```bash
+bench/bench.sh && bench/summarize.sh
+```
+
 ## Not there yet
 
 - Multipart and raw byte bodies, streaming requests and responses, and WebSockets.

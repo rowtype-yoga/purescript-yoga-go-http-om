@@ -11,7 +11,7 @@ package:
     - foldable-traversable: ">=6.0.1 <7.0.0"
     - foreign: ">=7.0.1 <8.0.0"
     - foreign-object: ">=4.1.1 <5.0.0"
-    - golang: "*"
+    - go-io: "*"
     - maybe: ">=6.0.1 <7.0.0"
     - newtype: ">=5.0.1 <6.0.0"
     - prelude: ">=6.0.3 <7.0.0"
@@ -33,8 +33,24 @@ package:
       - now: ">=6.0.0 <7.0.0"
       - parallel: ">=7.0.0 <8.0.0"
       - spec: ">=8.0.0 <9.0.0"
-      - golang
+      - go-http
+      - go-io
+      - go-os
 workspace:
   extraPackages:
-    golang:
-      path: ../purescript-golang
+    go-bytes:
+      git: https://github.com/i-am-the-slime/purescript-go.git
+      ref: 353775e4356f0146917c3b0ace5a99d489009190
+      subdir: packages/go-bytes
+    go-http:
+      git: https://github.com/i-am-the-slime/purescript-go.git
+      ref: 353775e4356f0146917c3b0ace5a99d489009190
+      subdir: packages/go-http
+    go-io:
+      git: https://github.com/i-am-the-slime/purescript-go.git
+      ref: 353775e4356f0146917c3b0ace5a99d489009190
+      subdir: packages/go-io
+    go-os:
+      git: https://github.com/i-am-the-slime/purescript-go.git
+      ref: 353775e4356f0146917c3b0ace5a99d489009190
+      subdir: packages/go-os
