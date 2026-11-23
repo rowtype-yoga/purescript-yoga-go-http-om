@@ -9,7 +9,7 @@ import Prelude
 
 import Effect.Aff.Class (liftAff)
 import Effect.Class (liftEffect)
-import Yoga.Go.HTTP.Om.Server (BoundAddress, ListenOptions, Server, ServerOptions, close, createServer, listen)
+import Yoga.Go.HTTP.Om.Server (BoundAddress, ListenOptions, Server, ServerOptions, closeAff, createServer, listenAff)
 import Yoga.Om (ask)
 import Yoga.Om.Layer (OmLayer, Scope, makeLayer, makeScopedLayer)
 
@@ -29,7 +29,7 @@ serverLayer options = makeScopedLayer acquire release
     server <- liftEffect (createServer options)
     pure { server }
 
-  release { server } = close server
+  release { server } = closeAff server
 
 -- | Bind a server supplied by `serverLayer`. The scoped server layer owns
 -- | shutdown, so this layer only exposes the bound address.
@@ -39,5 +39,5 @@ listenLayer
   -> OmLayer (server :: Server | r) () (Record (BoundAddressL ()))
 listenLayer options = makeLayer do
   { server } <- ask
-  boundAddress <- liftAff (listen options server)
+  boundAddress <- liftAff (listenAff options server)
   pure { boundAddress }

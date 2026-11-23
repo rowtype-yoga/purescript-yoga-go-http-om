@@ -22,9 +22,9 @@ import Test.Spec (Spec, around, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.Go.HTTP.Om.API (registerAPI, registerAPIWith)
 import Go.IO (IO, threadDelay, throwIO)
-import Yoga.Go.HTTP.Om.Route (GET, POST, Handler, Route, handle, handleIO, reject, respond, respondNoContent, respondWith)
+import Yoga.Go.HTTP.Om.Route (GET, POST, Handler, Route, handle, handleAff, reject, respond, respondNoContent, respondWith)
 import Yoga.Go.HTTP.OmIO (liftIO)
-import Yoga.Go.HTTP.Om.Server (BodyLimit(..), Host(..), Port(..), Server, close, createServer, defaultServerOptions, listen)
+import Yoga.Go.HTTP.Om.Server (BodyLimit(..), Host(..), Port(..), Server, closeAff, createServer, defaultServerOptions, listenAff)
 import Yoga.HTTP.API.Path (Required, type (/), type (:), type (:?))
 import Yoga.HTTP.API.Route.Encoding (FormData, JSON, PlainText)
 import Yoga.Om (ask)
@@ -174,12 +174,12 @@ notModifiedHandler = handle (reject @"notModified" unit)
 slowHandler :: Handler SlowRoute ()
 slowHandler = handle do
   { path } <- ask
-  liftAff (Aff.delay (Milliseconds 100.0))
+  liftIO (threadDelay (Milliseconds 100.0))
   respond @"ok" (show path.id)
 
 crashHandler :: Handler CrashRoute ()
 crashHandler = handle do
-  liftAff (Aff.throwError (error "boom") :: Aff Unit)
+  liftIO (throwIO (error "boom") :: IO Unit)
   respond @"ok" "unreachable"
 
 dependencyHandler :: Handler DependencyRoute (prefix :: String)
@@ -187,55 +187,55 @@ dependencyHandler = handle do
   { prefix } <- ask
   respond @"ok" (prefix <> "-injected")
 
-type IOUserRoute = Route GET
-  ("io" / "users" / "id" : Int)
+type AffUserRoute = Route GET
+  ("aff" / "users" / "id" : Int)
   {}
   ( ok :: { body :: User }
   , notFound :: { body :: { error :: String } }
   )
 
-type IOSlowRoute = Route GET
-  ("io" / "slow" / "id" : Int)
+type AffSlowRoute = Route GET
+  ("aff" / "slow" / "id" : Int)
   {}
   (ok :: { body :: String })
 
-type IOCrashRoute = Route GET
-  ("io" / "crash")
+type AffCrashRoute = Route GET
+  ("aff" / "crash")
   {}
   (ok :: { body :: String })
 
-type IODependencyRoute = Route GET
-  ("io" / "dependency")
+type AffDependencyRoute = Route GET
+  ("aff" / "dependency")
   {}
   (ok :: { body :: String })
 
-type IOAPI =
-  { ioUser :: IOUserRoute
-  , ioSlow :: IOSlowRoute
-  , ioCrash :: IOCrashRoute
+type AffAPI =
+  { affUser :: AffUserRoute
+  , affSlow :: AffSlowRoute
+  , affCrash :: AffCrashRoute
   }
 
-type IODependencyAPI = { ioDependency :: IODependencyRoute }
+type AffDependencyAPI = { affDependency :: AffDependencyRoute }
 
-ioUserHandler :: Handler IOUserRoute ()
-ioUserHandler = handleIO do
+affUserHandler :: Handler AffUserRoute ()
+affUserHandler = handleAff do
   { path } <- ask
   if path.id == 42 then respond @"ok" { id: path.id, name: "Alice" }
   else reject @"notFound" { error: "missing:" <> show path.id }
 
-ioSlowHandler :: Handler IOSlowRoute ()
-ioSlowHandler = handleIO do
+affSlowHandler :: Handler AffSlowRoute ()
+affSlowHandler = handleAff do
   { path } <- ask
-  liftIO (threadDelay (Milliseconds 100.0))
+  liftAff (Aff.delay (Milliseconds 100.0))
   respond @"ok" (show path.id)
 
-ioCrashHandler :: Handler IOCrashRoute ()
-ioCrashHandler = handleIO do
-  liftIO (throwIO (error "boom") :: IO Unit)
+affCrashHandler :: Handler AffCrashRoute ()
+affCrashHandler = handleAff do
+  liftAff (Aff.throwError (error "boom") :: Aff Unit)
   respond @"ok" "unreachable"
 
-ioDependencyHandler :: Handler IODependencyRoute (prefix :: String)
-ioDependencyHandler = handleIO do
+affDependencyHandler :: Handler AffDependencyRoute (prefix :: String)
+affDependencyHandler = handleAff do
   { prefix } <- ask
   respond @"ok" (prefix <> "-injected")
 
@@ -252,7 +252,7 @@ lateHandler = handle (respond @"ok" "added while serving")
 type Fixture = { baseUrl :: String, server :: Server }
 
 withServer :: forall a. (Fixture -> Aff a) -> Aff a
-withServer test = bracket acquire (close <<< _.server) (test <<< _.fixture)
+withServer test = bracket acquire (closeAff <<< _.server) (test <<< _.fixture)
   where
   acquire = do
     server <- liftEffect do
@@ -275,9 +275,9 @@ withServer test = bracket acquire (close <<< _.server) (test <<< _.fixture)
         value
       pure value
     liftEffect (registerAPIWith @DependencyAPI { prefix: "deps" } { dependency: dependencyHandler } server)
-    liftEffect (registerAPI @IOAPI { ioUser: ioUserHandler, ioSlow: ioSlowHandler, ioCrash: ioCrashHandler } server)
-    liftEffect (registerAPIWith @IODependencyAPI { prefix: "io" } { ioDependency: ioDependencyHandler } server)
-    address <- listen { host: Host "127.0.0.1", port: Port 0 } server
+    liftEffect (registerAPI @AffAPI { affUser: affUserHandler, affSlow: affSlowHandler, affCrash: affCrashHandler } server)
+    liftEffect (registerAPIWith @AffDependencyAPI { prefix: "aff" } { affDependency: affDependencyHandler } server)
+    address <- listenAff { host: Host "127.0.0.1", port: Port 0 } server
     pure { server, fixture: { baseUrl: "http://127.0.0.1:" <> show (un Port address.port), server } }
 
 addLateRoute :: Fixture -> Aff Unit
@@ -384,10 +384,10 @@ spec = around withServer
           status response `shouldEqual` 200
           HTTP.responseBody response `shouldEqual` "added while serving"
 
-      describe "IO handlers" do
+      describe "Aff handlers" do
         it "answers a path capture with JSON and a rejection with its status" \fixture -> do
-          found <- get fixture "/io/users/42"
-          missing <- get fixture "/io/users/9"
+          found <- get fixture "/aff/users/42"
+          missing <- get fixture "/aff/users/9"
           status found `shouldEqual` 200
           HTTP.responseBody found `shouldEqual` "{\"name\":\"Alice\",\"id\":42}"
           HTTP.responseHeader (HeaderName "content-type") found `shouldEqual` Just (HeaderValue "application/json; charset=utf-8")
@@ -395,21 +395,21 @@ spec = around withServer
           HTTP.responseBody missing `shouldEqual` "{\"error\":\"missing:9\"}"
 
         it "answers a parse failure with 400" \fixture -> do
-          response <- get fixture "/io/users/not-an-int"
+          response <- get fixture "/aff/users/not-an-int"
           status response `shouldEqual` 400
 
         it "injects dependencies through registerAPIWith" \fixture -> do
-          response <- get fixture "/io/dependency"
-          HTTP.responseBody response `shouldEqual` "io-injected"
+          response <- get fixture "/aff/dependency"
+          HTTP.responseBody response `shouldEqual` "aff-injected"
 
         it "converts an exception to 500" \fixture -> do
-          response <- get fixture "/io/crash"
+          response <- get fixture "/aff/crash"
           status response `shouldEqual` 500
           HTTP.responseBody response `shouldEqual` "Internal Server Error"
 
         it "runs handlers that wait at the same time" \fixture -> do
           started <- liftEffect now
-          bodies <- parTraverse (\id -> HTTP.responseBody <$> get fixture ("/io/slow/" <> show id)) (Array.range 1 20)
+          bodies <- parTraverse (\id -> HTTP.responseBody <$> get fixture ("/aff/slow/" <> show id)) (Array.range 1 20)
           finished <- liftEffect now
           bodies `shouldEqual` map show (Array.range 1 20)
           (diff finished started :: Milliseconds) `shouldSatisfy` (_ < Milliseconds 1000.0)

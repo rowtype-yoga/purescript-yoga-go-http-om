@@ -15,17 +15,19 @@ module Yoga.Go.HTTP.Om.Server
   , Sending
   , createServer
   , addRoute
-  , addRouteIO
+  , addRouteAff
   , addServing
   , sendingAff
   , sendingIO
   , listen
-  , listenIO
+  , listenAff
   , close
-  , closeIO
+  , closeAff
   , requestData
   , sendResponse
+  , sendResponseAff
   , sendResponseWithoutBody
+  , sendResponseWithoutBodyAff
   ) where
 
 import Prelude
@@ -138,11 +140,11 @@ createServer options = pure
 
 -- | Register a low-level route. Typed API users normally call `registerAPI`. A handler that fails
 -- | answers 500, as does one that finishes without a response.
-addRoute :: String -> String -> BodyKind -> (RequestHandle -> Aff Unit) -> Server -> Effect Unit
-addRoute method path bodyKind handler = addServing method path bodyKind (sendingAff.serving handler)
+addRoute :: String -> String -> BodyKind -> (RequestHandle -> IO Unit) -> Server -> Effect Unit
+addRoute method path bodyKind handler = addServing method path bodyKind (sendingIO.serving handler)
 
-addRouteIO :: String -> String -> BodyKind -> (RequestHandle -> IO Unit) -> Server -> Effect Unit
-addRouteIO method path bodyKind handler = addServing method path bodyKind (sendingIO.serving handler)
+addRouteAff :: String -> String -> BodyKind -> (RequestHandle -> Aff Unit) -> Server -> Effect Unit
+addRouteAff method path bodyKind handler = addServing method path bodyKind (sendingAff.serving handler)
 
 addServing :: String -> String -> BodyKind -> Serving -> Server -> Effect Unit
 addServing method path bodyKind serving server = addRouteImpl method path (bodyKindName bodyKind) serving server
@@ -180,28 +182,28 @@ sendingIO = { reply, serving }
 
 -- | Bind the server and return the actual address. Supports ephemeral port 0. While it listens,
 -- | the server keeps the program running.
-listen :: ListenOptions -> Server -> Aff BoundAddress
+listen :: ListenOptions -> Server -> IO BoundAddress
 listen { host, port } server = do
-  bound <- liftEffect (listenImpl Left Right (un Host host) (un Port port) server)
-  either (throwError <<< error) pure bound
-
-listenIO :: ListenOptions -> Server -> IO BoundAddress
-listenIO { host, port } server = do
   bound <- IO (listenImpl Left Right (un Host host) (un Port port) server)
   either (throwIO <<< error) pure bound
 
--- | Stop accepting connections and wait for the requests in flight.
-close :: Server -> Aff Unit
-close server = makeAff \done -> closeImpl server (done (Right unit)) $> nonCanceler
+listenAff :: ListenOptions -> Server -> Aff BoundAddress
+listenAff { host, port } server = do
+  bound <- liftEffect (listenImpl Left Right (un Host host) (un Port port) server)
+  either (throwError <<< error) pure bound
 
-closeIO :: Server -> IO Unit
-closeIO server = do
+-- | Stop accepting connections and wait for the requests in flight.
+close :: Server -> IO Unit
+close server = do
   closed <- newEmptyMVar
   IO (closeImpl server (signal closed))
   takeMVar closed
   where
   signal closed = case putMVar closed unit of
     IO effect -> effect
+
+closeAff :: Server -> Aff Unit
+closeAff server = makeAff \done -> closeImpl server (done (Right unit)) $> nonCanceler
 
 requestData :: RequestHandle -> RequestData
 requestData request =
@@ -219,12 +221,18 @@ requestData request =
 
 -- | Answer with the status, headers and body: a string body is plain text, `null` and
 -- | `undefined` send no body, anything else is JSON.
-sendResponse :: Int -> Object String -> Foreign -> RequestHandle -> Aff Unit
-sendResponse status headers body = sendingAff.reply { status, headers, body: Just body }
+sendResponse :: Int -> Object String -> Foreign -> RequestHandle -> IO Unit
+sendResponse status headers body = sendingIO.reply { status, headers, body: Just body }
+
+sendResponseAff :: Int -> Object String -> Foreign -> RequestHandle -> Aff Unit
+sendResponseAff status headers body = sendingAff.reply { status, headers, body: Just body }
 
 -- | Answer with the status and headers only.
-sendResponseWithoutBody :: Int -> Object String -> RequestHandle -> Aff Unit
-sendResponseWithoutBody status headers = sendingAff.reply { status, headers, body: Nothing }
+sendResponseWithoutBody :: Int -> Object String -> RequestHandle -> IO Unit
+sendResponseWithoutBody status headers = sendingIO.reply { status, headers, body: Nothing }
+
+sendResponseWithoutBodyAff :: Int -> Object String -> RequestHandle -> Aff Unit
+sendResponseWithoutBodyAff status headers = sendingAff.reply { status, headers, body: Nothing }
 
 sendReply :: Reply -> RequestHandle -> Effect Unit
 sendReply { status, headers, body } request = case body of

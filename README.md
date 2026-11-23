@@ -9,9 +9,8 @@ module Main where
 import Prelude
 
 import Effect (Effect)
-import Effect.Aff (launchAff_)
-import Effect.Class (liftEffect)
-import Effect.Console (log)
+import Effect.Class.Console (log)
+import Go.IO (launchIO_)
 import Yoga.Go.HTTP.Om (Handler, Host(..), Port(..), createServer, defaultServerOptions, handle, listen, registerAPI, reject, respond)
 import Yoga.Go.HTTP.Om.Route (GET, Route)
 import Yoga.HTTP.API.Path (type (/), type (:))
@@ -33,9 +32,9 @@ main :: Effect Unit
 main = do
   server <- createServer defaultServerOptions
   registerAPI @API { getUser } server
-  launchAff_ do
+  launchIO_ do
     address <- listen { host: Host "127.0.0.1", port: Port 8080 } server
-    liftEffect (log ("listening on " <> show address.port))
+    log ("listening on " <> show address.port)
 ```
 
 ```bash
@@ -72,9 +71,26 @@ registerAPIWith @API { prefix: "hi" } { greet } server
 
 ## Handlers run at the same time
 
-Go serves every request on its own goroutine. While a handler waits, say in `delay` or on another
-HTTP call, other requests keep going. PureScript itself still runs one piece at a time, like in
-JavaScript, so a `Ref` behaves the way you're used to.
+Go serves every request on its own goroutine. Handlers run in `IO`, so as long as your program
+doesn't use `Aff`, they really run in parallel, on every core you've got. Reach for `liftIO` to call
+other `IO` code from a handler, like `threadDelay` or another HTTP call.
+
+## Got Aff code?
+
+Every `IO` function has an `Aff` twin with the same name plus `Aff`: `handleAff`, `listenAff`,
+`closeAff`, `addRouteAff` and `sendResponseAff`. Mix them freely, a `Handler` is a `Handler`
+either way:
+
+```purescript
+slow :: Handler SlowRoute ()
+slow = handleAff do
+  delay (Milliseconds 100.0) # liftAff
+  respond @"ok" "done"
+```
+
+The catch: once `Aff` is in the program, PureScript runs one piece at a time, like in JavaScript.
+Other requests still keep going while a handler waits, and a `Ref` behaves the way you're used to,
+but you're down to one core.
 
 ## Not there yet
 

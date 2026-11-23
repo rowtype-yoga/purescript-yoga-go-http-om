@@ -1,6 +1,6 @@
 module Yoga.Go.HTTP.Om.Route.Handler
   ( handle
-  , handleIO
+  , handleAff
   , Handler(..)
   , respond
   , respondWith
@@ -290,9 +290,9 @@ mapReject f = handleErrors' \variant ->
 newtype Handler route (ctx :: Row Type) = Handler (Record ctx -> RouteRunner)
 
 
--- | Create a `Handler` from an Om computation.
+-- | Create a `Handler` from an `OmIO` computation.
 -- |
--- | The Om computation receives the request context
+-- | The computation receives the request context
 -- | (path, query, headers, cookies, body) plus any extra dependencies via
 -- | `ask`. Request field types are verified against the route at compile time.
 -- |
@@ -301,83 +301,14 @@ newtype Handler route (ctx :: Row Type) = Handler (Record ctx -> RouteRunner)
 -- | putUserHandler :: Handler PutUser (userRepo :: UserRepo)
 -- | putUserHandler = handle do
 -- |   { path, body, userRepo } <- ask
--- |   existing <- userRepo.findByName path.name # liftAff
+-- |   existing <- userRepo.findByName path.name # liftIO
 -- |   case existing of
 -- |     Just user -> respond @"ok" user
 -- |     Nothing -> do
--- |       user <- userRepo.create path.name body.email # liftAff
+-- |       user <- userRepo.create path.name body.email # liftIO
 -- |       respond @"created" user
 -- | ```
 handle
-  :: forall @route pathParams queryParams reqHeaders reqCookies body respVariant
-       successRow errorRow extraCtx pathQuery method segments partialRequest o_ fullEncoding userResp merged
-   . RouteHandler route pathParams queryParams reqHeaders body respVariant
-  => RouteCookies route reqCookies
-  => SplitResponse respVariant successRow errorRow
-  => Row.Union successRow errorRow respVariant
-  => Row.Union errorRow successRow respVariant
-  => Row.Union pathParams queryParams pathQuery
-  => Row.Nub pathQuery pathQuery
-  => Row.Lacks "respondNow" errorRow
-  => Row.Lacks "path" extraCtx
-  => Row.Lacks "query" extraCtx
-  => Row.Lacks "headers" extraCtx
-  => Row.Lacks "cookies" extraCtx
-  => Row.Lacks "body" extraCtx
-  => Row.Union
-       ( path :: Record pathParams
-       , query :: Record queryParams
-       , headers :: Record reqHeaders
-       , cookies :: Record reqCookies
-       , body :: body
-       )
-       extraCtx
-       merged
-  => Row.Nub merged
-       ( path :: Record pathParams
-       , query :: Record queryParams
-       , headers :: Record reqHeaders
-       , cookies :: Record reqCookies
-       , body :: body
-       | extraCtx
-       )
-  => RouteShape route method segments partialRequest userResp
-  => Row.Union partialRequest o_ (headers :: Record reqHeaders, cookies :: Record reqCookies, body :: fullEncoding)
-  => DefaultRequestFields partialRequest reqHeaders reqCookies fullEncoding
-  => RenderMethod method
-  => PathPattern segments
-  => SegmentPathParams segments pathParams
-  => SegmentQueryParams segments queryParams
-  => EncodingBody fullEncoding body
-  => ParsePathParams pathParams
-  => ParseQueryParamsFromObject queryParams
-  => ParseHeaders reqHeaders
-  => ParseCookies reqCookies
-  => ParseBody fullEncoding body
-  => ConvertResponseVariant userResp respVariant
-  => HandleResponse respVariant
-  => Om
-       { path :: Record pathParams
-       , query :: Record queryParams
-       , headers :: Record reqHeaders
-       , cookies :: Record reqCookies
-       , body :: body
-       | extraCtx
-       }
-       (respondNow :: Variant successRow | errorRow)
-       (Variant successRow)
-  -> Handler route extraCtx
-handle om = Handler \deps -> routeRunner @route sendingAff \requestCtx ->
-  runOm (Record.merge requestCtx deps) { exception: Aff.throwError } $
-    handleErrors' errorHandler (Variant.expand <$> om')
-  where
-  om' = handleErrors' respondNowHandler om
-  respondNowHandler = Variant.on (Proxy :: Proxy "respondNow") pure throwError
-  errorHandler = Variant.on (Proxy :: Proxy "exception")
-    (throwError <<< Variant.inj (Proxy :: Proxy "exception"))
-    (pure <<< Variant.expand)
-
-handleIO
   :: forall @route pathParams queryParams reqHeaders reqCookies body respVariant
        successRow errorRow extraCtx pathQuery method segments partialRequest o_ fullEncoding userResp merged
    . RouteHandler route pathParams queryParams reqHeaders body respVariant
@@ -436,11 +367,80 @@ handleIO
        (respondNow :: Variant successRow | errorRow)
        (Variant successRow)
   -> Handler route extraCtx
-handleIO om = Handler \deps -> routeRunner @route sendingIO \requestCtx ->
+handle om = Handler \deps -> routeRunner @route sendingIO \requestCtx ->
   runOmIO (Record.merge requestCtx deps) om >>= either answer (pure <<< Variant.expand)
   where
   answer = Variant.on (Proxy :: Proxy "respondNow") (pure <<< Variant.expand)
     (Variant.on (Proxy :: Proxy "exception") throwIO (pure <<< Variant.expand))
+
+handleAff
+  :: forall @route pathParams queryParams reqHeaders reqCookies body respVariant
+       successRow errorRow extraCtx pathQuery method segments partialRequest o_ fullEncoding userResp merged
+   . RouteHandler route pathParams queryParams reqHeaders body respVariant
+  => RouteCookies route reqCookies
+  => SplitResponse respVariant successRow errorRow
+  => Row.Union successRow errorRow respVariant
+  => Row.Union errorRow successRow respVariant
+  => Row.Union pathParams queryParams pathQuery
+  => Row.Nub pathQuery pathQuery
+  => Row.Lacks "respondNow" errorRow
+  => Row.Lacks "path" extraCtx
+  => Row.Lacks "query" extraCtx
+  => Row.Lacks "headers" extraCtx
+  => Row.Lacks "cookies" extraCtx
+  => Row.Lacks "body" extraCtx
+  => Row.Union
+       ( path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       )
+       extraCtx
+       merged
+  => Row.Nub merged
+       ( path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       | extraCtx
+       )
+  => RouteShape route method segments partialRequest userResp
+  => Row.Union partialRequest o_ (headers :: Record reqHeaders, cookies :: Record reqCookies, body :: fullEncoding)
+  => DefaultRequestFields partialRequest reqHeaders reqCookies fullEncoding
+  => RenderMethod method
+  => PathPattern segments
+  => SegmentPathParams segments pathParams
+  => SegmentQueryParams segments queryParams
+  => EncodingBody fullEncoding body
+  => ParsePathParams pathParams
+  => ParseQueryParamsFromObject queryParams
+  => ParseHeaders reqHeaders
+  => ParseCookies reqCookies
+  => ParseBody fullEncoding body
+  => ConvertResponseVariant userResp respVariant
+  => HandleResponse respVariant
+  => Om
+       { path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       | extraCtx
+       }
+       (respondNow :: Variant successRow | errorRow)
+       (Variant successRow)
+  -> Handler route extraCtx
+handleAff om = Handler \deps -> routeRunner @route sendingAff \requestCtx ->
+  runOm (Record.merge requestCtx deps) { exception: Aff.throwError } $
+    handleErrors' errorHandler (Variant.expand <$> om')
+  where
+  om' = handleErrors' respondNowHandler om
+  respondNowHandler = Variant.on (Proxy :: Proxy "respondNow") pure throwError
+  errorHandler = Variant.on (Proxy :: Proxy "exception")
+    (throwError <<< Variant.inj (Proxy :: Proxy "exception"))
+    (pure <<< Variant.expand)
 
 class RouteResponseVariant (route :: Type) (respVariant :: Row Type) | route -> respVariant
 
