@@ -23,3 +23,5 @@ mkdir -p "$OUT"
 (cd "$HERE" && "$IRIS" go -p yoga-go-http-om --entry Test.Main.main "$OUT")
 (cd "$OUT" && go build -buildvcs=false -o spec-runner .)
 "$OUT/spec-runner"
+(cd "$OUT" && go build -buildvcs=false -race -o spec-race .)
+"$OUT/spec-race"

@@ -6,10 +6,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/i-am-the-slime/iris-go/eventloop"
@@ -28,7 +30,8 @@ type BoundAddress struct {
 }
 
 type server struct {
-	routes         []route
+	routes         atomic.Pointer[[]route]
+	adding         sync.Mutex
 	maxBodyBytes   int64
 	headersTimeout time.Duration
 	requestTimeout time.Duration
@@ -68,7 +71,7 @@ type handle struct {
 	kind         string
 	body         string
 	bodyPresent  bool
-	sent         bool
+	sent         atomic.Bool
 }
 
 func CreateServerImpl(maxBodyBytes int32, headersMilliseconds, requestMilliseconds, keepAliveMilliseconds float64) *server {
@@ -89,12 +92,16 @@ func AddRouteImpl(method string, pattern string, bodyKind string, handler func(*
 		}
 	}
 	added.signature = signature(segments)
-	for _, existing := range s.routes {
+	s.adding.Lock()
+	defer s.adding.Unlock()
+	routes := s.table()
+	for _, existing := range routes {
 		if existing.method == added.method && existing.signature == added.signature {
 			panic(exception.NewError("Duplicate route shape: " + added.method + " " + pattern))
 		}
 	}
-	s.routes = append(s.routes, added)
+	routes = append(slices.Clip(routes), added)
+	s.routes.Store(&routes)
 }
 
 // ListenImpl binds the address and serves in the background. The server keeps the program alive
@@ -151,10 +158,9 @@ func BodyPresentImpl(h *handle) bool        { return h.bodyPresent }
 // SendResponseImpl writes the status, headers and body. A body is written only when hasBody and
 // the status allows one; defaultType is the content type when the headers name none.
 func SendResponseImpl(status int32, names []string, values []string, hasBody bool, body string, defaultType string, h *handle) {
-	if h.sent {
+	if !h.sent.CompareAndSwap(false, true) {
 		return
 	}
-	h.sent = true
 	header := h.writer.Header()
 	typed := false
 	for index, name := range names {
@@ -177,8 +183,7 @@ func SendResponseImpl(status int32, names []string, values []string, hasBody boo
 
 // SendFailureImpl answers 500 unless a response was already sent.
 func SendFailureImpl(h *handle) {
-	if !h.sent {
-		h.sent = true
+	if h.sent.CompareAndSwap(false, true) {
 		plain(h.writer, http.StatusInternalServerError, "Internal Server Error")
 	}
 }
@@ -190,7 +195,7 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 		return
 	}
 	var matches []match
-	for _, candidate := range s.routes {
+	for _, candidate := range s.table() {
 		if values, ok := candidate.match(path); ok {
 			matches = append(matches, match{route: candidate, values: values})
 		}
@@ -222,9 +227,16 @@ func (s *server) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
 	done := make(chan struct{})
 	selected.route.handler(h)(func() { close(done) })
 	<-done
-	if !h.sent {
+	if h.sent.CompareAndSwap(false, true) {
 		plain(writer, http.StatusInternalServerError, "Internal Server Error")
 	}
+}
+
+func (s *server) table() []route {
+	if routes := s.routes.Load(); routes != nil {
+		return *routes
+	}
+	return nil
 }
 
 // readBody fills the handle's body for the route's body kind, or returns the status and message

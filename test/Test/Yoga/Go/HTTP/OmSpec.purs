@@ -7,7 +7,7 @@ import Data.Either (either)
 import Data.Maybe (Maybe(..))
 import Data.Newtype (un)
 import Data.String as String
-import Control.Parallel (parTraverse)
+import Control.Parallel (parSequence_, parTraverse)
 import Data.DateTime.Instant (diff)
 import Data.Time.Duration (Milliseconds(..))
 import Effect.Aff (Aff, bracket)
@@ -22,7 +22,7 @@ import Test.Spec (Spec, around, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.Go.HTTP.Om.API (registerAPI, registerAPIWith)
 import Yoga.Go.HTTP.Om.Route (GET, POST, Handler, Route, handle, reject, respond, respondNoContent, respondWith)
-import Yoga.Go.HTTP.Om.Server (BodyLimit(..), Host(..), Port(..), close, createServer, defaultServerOptions, listen)
+import Yoga.Go.HTTP.Om.Server (BodyLimit(..), Host(..), Port(..), Server, close, createServer, defaultServerOptions, listen)
 import Yoga.HTTP.API.Path (Required, type (/), type (:), type (:?))
 import Yoga.HTTP.API.Route.Encoding (FormData, JSON, PlainText)
 import Yoga.Om (ask)
@@ -185,7 +185,17 @@ dependencyHandler = handle do
   { prefix } <- ask
   respond @"ok" (prefix <> "-injected")
 
-type Fixture = { baseUrl :: String }
+type LateRoute = Route GET
+  "late"
+  {}
+  (ok :: { body :: String })
+
+type LateAPI = { late :: LateRoute }
+
+lateHandler :: Handler LateRoute ()
+lateHandler = handle (respond @"ok" "added while serving")
+
+type Fixture = { baseUrl :: String, server :: Server }
 
 withServer :: forall a. (Fixture -> Aff a) -> Aff a
 withServer test = bracket acquire (close <<< _.server) (test <<< _.fixture)
@@ -212,7 +222,10 @@ withServer test = bracket acquire (close <<< _.server) (test <<< _.fixture)
       pure value
     liftEffect (registerAPIWith @DependencyAPI { prefix: "deps" } { dependency: dependencyHandler } server)
     address <- listen { host: Host "127.0.0.1", port: Port 0 } server
-    pure { server, fixture: { baseUrl: "http://127.0.0.1:" <> show (un Port address.port) } }
+    pure { server, fixture: { baseUrl: "http://127.0.0.1:" <> show (un Port address.port), server } }
+
+addLateRoute :: Fixture -> Aff Unit
+addLateRoute fixture = registerAPI @LateAPI { late: lateHandler } fixture.server # liftEffect
 
 get :: Fixture -> String -> Aff ClientResponse
 get fixture route = send fixture "GET" route [] ""
@@ -308,6 +321,12 @@ spec = around withServer
           finished <- liftEffect now
           bodies `shouldEqual` map show (Array.range 1 20)
           (diff finished started :: Milliseconds) `shouldSatisfy` (_ < Milliseconds 1000.0)
+
+        it "serves a route added while it answers other requests" \fixture -> do
+          parSequence_ ([ addLateRoute fixture ] <> Array.replicate 20 (void (get fixture "/users/42")))
+          response <- get fixture "/late"
+          status response `shouldEqual` 200
+          HTTP.responseBody response `shouldEqual` "added while serving"
 
       describe "protocol failures" do
         it "returns 404 for unknown paths" \fixture -> do
