@@ -21,7 +21,9 @@ import Go.Net.HTTP as HTTP
 import Test.Spec (Spec, around, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
 import Yoga.Go.HTTP.Om.API (registerAPI, registerAPIWith)
-import Yoga.Go.HTTP.Om.Route (GET, POST, Handler, Route, handle, reject, respond, respondNoContent, respondWith)
+import Go.IO (IO, threadDelay, throwIO)
+import Yoga.Go.HTTP.Om.Route (GET, POST, Handler, Route, handle, handleIO, reject, respond, respondNoContent, respondWith)
+import Yoga.Go.HTTP.OmIO (liftIO)
 import Yoga.Go.HTTP.Om.Server (BodyLimit(..), Host(..), Port(..), Server, close, createServer, defaultServerOptions, listen)
 import Yoga.HTTP.API.Path (Required, type (/), type (:), type (:?))
 import Yoga.HTTP.API.Route.Encoding (FormData, JSON, PlainText)
@@ -185,6 +187,58 @@ dependencyHandler = handle do
   { prefix } <- ask
   respond @"ok" (prefix <> "-injected")
 
+type IOUserRoute = Route GET
+  ("io" / "users" / "id" : Int)
+  {}
+  ( ok :: { body :: User }
+  , notFound :: { body :: { error :: String } }
+  )
+
+type IOSlowRoute = Route GET
+  ("io" / "slow" / "id" : Int)
+  {}
+  (ok :: { body :: String })
+
+type IOCrashRoute = Route GET
+  ("io" / "crash")
+  {}
+  (ok :: { body :: String })
+
+type IODependencyRoute = Route GET
+  ("io" / "dependency")
+  {}
+  (ok :: { body :: String })
+
+type IOAPI =
+  { ioUser :: IOUserRoute
+  , ioSlow :: IOSlowRoute
+  , ioCrash :: IOCrashRoute
+  }
+
+type IODependencyAPI = { ioDependency :: IODependencyRoute }
+
+ioUserHandler :: Handler IOUserRoute ()
+ioUserHandler = handleIO do
+  { path } <- ask
+  if path.id == 42 then respond @"ok" { id: path.id, name: "Alice" }
+  else reject @"notFound" { error: "missing:" <> show path.id }
+
+ioSlowHandler :: Handler IOSlowRoute ()
+ioSlowHandler = handleIO do
+  { path } <- ask
+  liftIO (threadDelay (Milliseconds 100.0))
+  respond @"ok" (show path.id)
+
+ioCrashHandler :: Handler IOCrashRoute ()
+ioCrashHandler = handleIO do
+  liftIO (throwIO (error "boom") :: IO Unit)
+  respond @"ok" "unreachable"
+
+ioDependencyHandler :: Handler IODependencyRoute (prefix :: String)
+ioDependencyHandler = handleIO do
+  { prefix } <- ask
+  respond @"ok" (prefix <> "-injected")
+
 type LateRoute = Route GET
   "late"
   {}
@@ -221,6 +275,8 @@ withServer test = bracket acquire (close <<< _.server) (test <<< _.fixture)
         value
       pure value
     liftEffect (registerAPIWith @DependencyAPI { prefix: "deps" } { dependency: dependencyHandler } server)
+    liftEffect (registerAPI @IOAPI { ioUser: ioUserHandler, ioSlow: ioSlowHandler, ioCrash: ioCrashHandler } server)
+    liftEffect (registerAPIWith @IODependencyAPI { prefix: "io" } { ioDependency: ioDependencyHandler } server)
     address <- listen { host: Host "127.0.0.1", port: Port 0 } server
     pure { server, fixture: { baseUrl: "http://127.0.0.1:" <> show (un Port address.port), server } }
 
@@ -327,6 +383,36 @@ spec = around withServer
           response <- get fixture "/late"
           status response `shouldEqual` 200
           HTTP.responseBody response `shouldEqual` "added while serving"
+
+      describe "IO handlers" do
+        it "answers a path capture with JSON and a rejection with its status" \fixture -> do
+          found <- get fixture "/io/users/42"
+          missing <- get fixture "/io/users/9"
+          status found `shouldEqual` 200
+          HTTP.responseBody found `shouldEqual` "{\"name\":\"Alice\",\"id\":42}"
+          HTTP.responseHeader (HeaderName "content-type") found `shouldEqual` Just (HeaderValue "application/json; charset=utf-8")
+          status missing `shouldEqual` 404
+          HTTP.responseBody missing `shouldEqual` "{\"error\":\"missing:9\"}"
+
+        it "answers a parse failure with 400" \fixture -> do
+          response <- get fixture "/io/users/not-an-int"
+          status response `shouldEqual` 400
+
+        it "injects dependencies through registerAPIWith" \fixture -> do
+          response <- get fixture "/io/dependency"
+          HTTP.responseBody response `shouldEqual` "io-injected"
+
+        it "converts an exception to 500" \fixture -> do
+          response <- get fixture "/io/crash"
+          status response `shouldEqual` 500
+          HTTP.responseBody response `shouldEqual` "Internal Server Error"
+
+        it "runs handlers that wait at the same time" \fixture -> do
+          started <- liftEffect now
+          bodies <- parTraverse (\id -> HTTP.responseBody <$> get fixture ("/io/slow/" <> show id)) (Array.range 1 20)
+          finished <- liftEffect now
+          bodies `shouldEqual` map show (Array.range 1 20)
+          (diff finished started :: Milliseconds) `shouldSatisfy` (_ < Milliseconds 1000.0)
 
       describe "protocol failures" do
         it "returns 404 for unknown paths" \fixture -> do

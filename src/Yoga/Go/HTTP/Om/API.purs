@@ -49,7 +49,7 @@ import Type.Function (type ($))
 import Type.Proxy (Proxy(..))
 import Yoga.Go.HTTP.Om.Route.Handler (Handler(..))
 import Yoga.Go.HTTP.Om.Route.HandleRoute (RouteRunner)
-import Yoga.Go.HTTP.Om.Server (Server, addRoute)
+import Yoga.Go.HTTP.Om.Server (Server, addServing)
 import Yoga.HTTP.API.Route.RouteHandler (class ApiRecord)
 import Yoga.Om.Layer (OmLayer, makeLayer)
 
@@ -85,7 +85,7 @@ instance (IsEmptyRow ctx empty, AssertEmptyCtxBool empty label ctx) => AssertEmp
 
 -- | Serve a route the way its runner says.
 register :: RouteRunner -> Server -> Effect Unit
-register runner = addRoute runner.method runner.pattern runner.bodyKind runner.run
+register runner = addServing runner.method runner.pattern runner.bodyKind runner.serving
 
 class RegisterAPI (handlers :: Row Type) where
   registerAPIImpl :: Record handlers -> Server -> Effect Unit

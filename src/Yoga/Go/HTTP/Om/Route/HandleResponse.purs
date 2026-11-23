@@ -7,10 +7,11 @@ module Yoga.Go.HTTP.Om.Route.HandleResponse
 
 import Prelude
 
+import Data.Maybe (Maybe(..))
+import Data.Newtype (un)
 import Data.Symbol (class IsSymbol)
 import Data.Variant (Variant)
 import Data.Variant as Variant
-import Effect.Aff (Aff)
 import Prim.Row (class Cons, class Lacks)
 import Prim.RowList (class RowToList, RowList)
 import Prim.RowList as RL
@@ -19,16 +20,16 @@ import Yoga.HTTP.API.Route.Response (Response(..))
 import Yoga.HTTP.API.Route.StatusCode (StatusCode(..), class StatusCodeMap, statusCodeFor)
 import Yoga.JSON (class WriteForeign, writeImpl)
 import Yoga.Go.HTTP.Om.Route.SetHeaders (class SetHeaders, setHeaders)
-import Yoga.Go.HTTP.Om.Server (RequestHandle, sendResponse, sendResponseWithoutBody)
+import Yoga.Go.HTTP.Om.Server (Reply)
 
 class HandleResponse (respVariant :: Row Type) where
-  handleResponse :: Proxy respVariant -> Variant respVariant -> RequestHandle -> Aff Unit
+  handleResponse :: Proxy respVariant -> Variant respVariant -> Reply
 
 instance (RowToList respVariant rl, HandleResponseRL rl respVariant) => HandleResponse respVariant where
   handleResponse _ = handleResponseRL (Proxy :: Proxy rl)
 
 class HandleResponseRL (rl :: RowList Type) (respVariant :: Row Type) | rl -> respVariant where
-  handleResponseRL :: Proxy rl -> Variant respVariant -> RequestHandle -> Aff Unit
+  handleResponseRL :: Proxy rl -> Variant respVariant -> Reply
 
 instance HandleResponseRL RL.Nil () where
   handleResponseRL _ = Variant.case_
@@ -42,20 +43,12 @@ instance
   , Lacks label rest
   ) =>
   HandleResponseRL (RL.Cons label (Response headers Unit) tail) respVariant where
-  handleResponseRL _ variant request =
-    Variant.on (Proxy :: Proxy label) handler rest variant
+  handleResponseRL _ = Variant.on (Proxy :: Proxy label) reply (handleResponseRL (Proxy :: Proxy tail))
     where
-    handler :: Response headers Unit -> Aff Unit
-    handler (Response response) =
-      let StatusCode status = statusCodeFor (Proxy :: Proxy label)
-      in
-        sendResponseWithoutBody
-          status
-          (setHeaders response.headers)
-          request
+    reply :: Response headers Unit -> Reply
+    reply (Response response) = { status, headers: setHeaders response.headers, body: Nothing }
 
-    rest :: Variant rest -> Aff Unit
-    rest response = handleResponseRL (Proxy :: Proxy tail) response request
+    status = un StatusCode (statusCodeFor (Proxy :: Proxy label))
 
 else instance
   ( IsSymbol label
@@ -67,18 +60,9 @@ else instance
   , Lacks label rest
   ) =>
   HandleResponseRL (RL.Cons label (Response headers body) tail) respVariant where
-  handleResponseRL _ variant request =
-    Variant.on (Proxy :: Proxy label) handler rest variant
+  handleResponseRL _ = Variant.on (Proxy :: Proxy label) reply (handleResponseRL (Proxy :: Proxy tail))
     where
-    handler :: Response headers body -> Aff Unit
-    handler (Response response) =
-      let StatusCode status = statusCodeFor (Proxy :: Proxy label)
-      in
-        sendResponse
-          status
-          (setHeaders response.headers)
-          (writeImpl response.body)
-          request
+    reply :: Response headers body -> Reply
+    reply (Response response) = { status, headers: setHeaders response.headers, body: Just (writeImpl response.body) }
 
-    rest :: Variant rest -> Aff Unit
-    rest response = handleResponseRL (Proxy :: Proxy tail) response request
+    status = un StatusCode (statusCodeFor (Proxy :: Proxy label))

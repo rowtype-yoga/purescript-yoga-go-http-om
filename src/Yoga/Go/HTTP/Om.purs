@@ -6,9 +6,11 @@ module Yoga.Go.HTTP.Om
   , module Yoga.Go.HTTP.Om.Server.Layer
   , module Yoga.Go.HTTP.Om.Route
   , module Yoga.Go.HTTP.Om.API
+  , module Yoga.Go.HTTP.OmIO
   ) where
 
 import Yoga.Go.HTTP.Om.API (registerAPI, registerAPILayer, registerAPIWith)
-import Yoga.Go.HTTP.Om.Route (Handler(..), handle, mapReject, reject, rejectWith, respond, respondNoContent, respondNotModified, respondWith)
-import Yoga.Go.HTTP.Om.Server (BodyKind(..), BodyLimit(..), BoundAddress, Host(..), ListenOptions, Port(..), RequestData, RequestHandle, Server, ServerOptions, addRoute, close, createServer, defaultServerOptions, listen, requestData, sendResponse)
+import Yoga.Go.HTTP.Om.Route (Handler(..), handle, handleIO, mapReject, reject, rejectWith, respond, respondNoContent, respondNotModified, respondWith)
+import Yoga.Go.HTTP.Om.Server (BodyKind(..), BodyLimit(..), BoundAddress, Host(..), ListenOptions, Port(..), RequestData, RequestHandle, Server, ServerOptions, addRoute, addRouteIO, close, closeIO, createServer, defaultServerOptions, listen, listenIO, requestData, sendResponse)
 import Yoga.Go.HTTP.Om.Server.Layer (BoundAddressL, ServerL, listenLayer, serverLayer)
+import Yoga.Go.HTTP.OmIO (OmIO, liftIO, runOmIO)

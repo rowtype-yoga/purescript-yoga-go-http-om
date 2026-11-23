@@ -1,5 +1,6 @@
 module Yoga.Go.HTTP.Om.Route.Handler
   ( handle
+  , handleIO
   , Handler(..)
   , respond
   , respondWith
@@ -20,7 +21,8 @@ module Yoga.Go.HTTP.Om.Route.Handler
 
 import Prelude
 
-import Control.Monad.Error.Class (throwError)
+import Control.Monad.Error.Class (class MonadThrow, throwError)
+import Data.Either (either)
 import Data.Symbol (class IsSymbol)
 import Data.Variant (Variant)
 import Data.Variant as Variant
@@ -48,6 +50,9 @@ import Yoga.HTTP.API.Route.RenderMethod (class RenderMethod)
 import Yoga.HTTP.API.Route.Route (Route, class ConvertResponseVariant)
 import Yoga.HTTP.API.Route.RouteHandler (class RouteCookies, class RouteHandler)
 import Yoga.Om (Om, handleErrors', runOm)
+import Go.IO (throwIO)
+import Yoga.Go.HTTP.Om.Server (sendingAff, sendingIO)
+import Yoga.Go.HTTP.OmIO (OmIO, runOmIO)
 
 -- | Convert either a status code (Int) or label (Symbol) to a label (Symbol).
 -- | This allows functions to accept both @404 and @"notFound" polymorphically.
@@ -166,12 +171,13 @@ instance
 -- | respond @201 newUser
 -- | ```
 respond
-  :: forall @labelOrCode label body r1 r2 ctx err
+  :: forall @labelOrCode label body r1 r2 m
    . ToLabel (Proxy labelOrCode) label
   => IsSymbol label
   => Row.Cons label (Response () body) r1 r2
+  => Applicative m
   => body
-  -> Om ctx err (Variant r2)
+  -> m (Variant r2)
 respond body =
   pure (Variant.inj (Proxy :: Proxy label) (Response { headers: {}, body }))
 
@@ -183,13 +189,14 @@ respond body =
 -- | respondWith @201 { "Location": "/users/123" } user
 -- | ```
 respondWith
-  :: forall @labelOrCode label headers body r1 r2 ctx err
+  :: forall @labelOrCode label headers body r1 r2 m
    . ToLabel (Proxy labelOrCode) label
   => IsSymbol label
   => Row.Cons label (Response headers body) r1 r2
+  => Applicative m
   => Record headers
   -> body
-  -> Om ctx err (Variant r2)
+  -> m (Variant r2)
 respondWith headers body =
   pure (Variant.inj (Proxy :: Proxy label) (Response { headers, body }))
 
@@ -200,8 +207,9 @@ respondWith headers body =
 -- | respondNoContent
 -- | ```
 respondNoContent
-  :: forall ctx err r
-   . Om ctx err (Variant (noContent :: Response () Unit | r))
+  :: forall m r
+   . Applicative m
+  => m (Variant (noContent :: Response () Unit | r))
 respondNoContent =
   pure ((Variant.inj (Proxy :: Proxy "noContent") (Response { headers: {}, body: unit })))
 
@@ -212,8 +220,9 @@ respondNoContent =
 -- | respondNotModified
 -- | ```
 respondNotModified
-  :: forall ctx err r
-   . Om ctx err (Variant (notModified :: Response () Unit | r))
+  :: forall m r
+   . Applicative m
+  => m (Variant (notModified :: Response () Unit | r))
 respondNotModified =
   pure (Variant.inj (Proxy :: Proxy "notModified") (Response { headers: {}, body: unit }))
 
@@ -227,13 +236,14 @@ respondNotModified =
 -- | reject @400 { error: "Invalid input" }
 -- | ```
 reject
-  :: forall @labelOrCode label body _r1 err _r2 ctx a
+  :: forall @labelOrCode label body _r1 err _r2 m a
    . ToLabel (Proxy labelOrCode) label
   => IsSymbol label
   => Row.Cons label (Response () body) _r1 err
   => Row.Cons label (Response () body) _r2 (exception :: Error | err)
+  => MonadThrow (Variant (exception :: Error | err)) m
   => body
-  -> Om ctx err a
+  -> m a
 reject body =
   throwError (Variant.inj (Proxy :: Proxy label) (Response { headers: {}, body }))
 
@@ -245,14 +255,15 @@ reject body =
 -- | rejectWith @401 { "WWW-Authenticate": "Bearer" } { error: "Invalid token" }
 -- | ```
 rejectWith
-  :: forall @labelOrCode label headers body _r1 err _r2 ctx a
+  :: forall @labelOrCode label headers body _r1 err _r2 m a
    . ToLabel (Proxy labelOrCode) label
   => IsSymbol label
   => Row.Cons label (Response headers body) _r1 err
   => Row.Cons label (Response headers body) _r2 (exception :: Error | err)
+  => MonadThrow (Variant (exception :: Error | err)) m
   => Record headers
   -> body
-  -> Om ctx err a
+  -> m a
 rejectWith headers body =
   throwError (Variant.inj (Proxy :: Proxy label) (Response { headers, body }))
 
@@ -356,7 +367,7 @@ handle
        (respondNow :: Variant successRow | errorRow)
        (Variant successRow)
   -> Handler route extraCtx
-handle om = Handler \deps -> routeRunner @route \requestCtx ->
+handle om = Handler \deps -> routeRunner @route sendingAff \requestCtx ->
   runOm (Record.merge requestCtx deps) { exception: Aff.throwError } $
     handleErrors' errorHandler (Variant.expand <$> om')
   where
@@ -365,6 +376,71 @@ handle om = Handler \deps -> routeRunner @route \requestCtx ->
   errorHandler = Variant.on (Proxy :: Proxy "exception")
     (throwError <<< Variant.inj (Proxy :: Proxy "exception"))
     (pure <<< Variant.expand)
+
+handleIO
+  :: forall @route pathParams queryParams reqHeaders reqCookies body respVariant
+       successRow errorRow extraCtx pathQuery method segments partialRequest o_ fullEncoding userResp merged
+   . RouteHandler route pathParams queryParams reqHeaders body respVariant
+  => RouteCookies route reqCookies
+  => SplitResponse respVariant successRow errorRow
+  => Row.Union successRow errorRow respVariant
+  => Row.Union errorRow successRow respVariant
+  => Row.Union pathParams queryParams pathQuery
+  => Row.Nub pathQuery pathQuery
+  => Row.Lacks "respondNow" errorRow
+  => Row.Lacks "path" extraCtx
+  => Row.Lacks "query" extraCtx
+  => Row.Lacks "headers" extraCtx
+  => Row.Lacks "cookies" extraCtx
+  => Row.Lacks "body" extraCtx
+  => Row.Union
+       ( path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       )
+       extraCtx
+       merged
+  => Row.Nub merged
+       ( path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       | extraCtx
+       )
+  => RouteShape route method segments partialRequest userResp
+  => Row.Union partialRequest o_ (headers :: Record reqHeaders, cookies :: Record reqCookies, body :: fullEncoding)
+  => DefaultRequestFields partialRequest reqHeaders reqCookies fullEncoding
+  => RenderMethod method
+  => PathPattern segments
+  => SegmentPathParams segments pathParams
+  => SegmentQueryParams segments queryParams
+  => EncodingBody fullEncoding body
+  => ParsePathParams pathParams
+  => ParseQueryParamsFromObject queryParams
+  => ParseHeaders reqHeaders
+  => ParseCookies reqCookies
+  => ParseBody fullEncoding body
+  => ConvertResponseVariant userResp respVariant
+  => HandleResponse respVariant
+  => OmIO
+       { path :: Record pathParams
+       , query :: Record queryParams
+       , headers :: Record reqHeaders
+       , cookies :: Record reqCookies
+       , body :: body
+       | extraCtx
+       }
+       (respondNow :: Variant successRow | errorRow)
+       (Variant successRow)
+  -> Handler route extraCtx
+handleIO om = Handler \deps -> routeRunner @route sendingIO \requestCtx ->
+  runOmIO (Record.merge requestCtx deps) om >>= either answer (pure <<< Variant.expand)
+  where
+  answer = Variant.on (Proxy :: Proxy "respondNow") (pure <<< Variant.expand)
+    (Variant.on (Proxy :: Proxy "exception") throwIO (pure <<< Variant.expand))
 
 class RouteResponseVariant (route :: Type) (respVariant :: Row Type) | route -> respVariant
 

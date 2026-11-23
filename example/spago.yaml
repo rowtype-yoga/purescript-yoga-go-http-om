@@ -4,6 +4,7 @@ package:
     - aff: ">=8.0.1 <9.0.0"
     - console: ">=6.1.1 <7.0.0"
     - effect: ">=4.0.1 <5.0.0"
+    - golang: "*"
     - prelude: ">=6.0.3 <7.0.0"
     - yoga-go-http-om: "*"
     - yoga-om: ">=1.5.2 <2.0.0"

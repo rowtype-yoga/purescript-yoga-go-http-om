@@ -10,10 +10,19 @@ module Yoga.Go.HTTP.Om.Server
   , RequestHandle
   , RequestData
   , BodyKind(..)
+  , Serving
+  , Reply
+  , Sending
   , createServer
   , addRoute
+  , addRouteIO
+  , addServing
+  , sendingAff
+  , sendingIO
   , listen
+  , listenIO
   , close
+  , closeIO
   , requestData
   , sendResponse
   , sendResponseWithoutBody
@@ -23,6 +32,7 @@ import Prelude
 
 import Data.Array as Array
 import Data.Either (Either(..), either)
+import Data.Maybe (Maybe(..))
 import Data.Newtype (class Newtype, un)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple (fst, snd)
@@ -34,7 +44,9 @@ import Effect.Exception (error)
 import Foreign (Foreign, isNull, isUndefined, typeOf, unsafeFromForeign, unsafeToForeign)
 import Foreign.Object (Object)
 import Foreign.Object as Object
-import Go.IO (IO)
+import Go.IO (catch, throwIO)
+import Go.IO.Internal (IO(..))
+import Go.IO.MVar (newEmptyMVar, putMVar, takeMVar)
 import Yoga.JSON (unsafeStringify)
 
 -- | The route table and, once listening, the Go `http.Server`.
@@ -127,16 +139,44 @@ createServer options = pure
 -- | Register a low-level route. Typed API users normally call `registerAPI`. A handler that fails
 -- | answers 500, as does one that finishes without a response.
 addRoute :: String -> String -> BodyKind -> (RequestHandle -> Aff Unit) -> Server -> Effect Unit
-addRoute method path bodyKind handler server =
-  addRouteImpl method path (bodyKindName bodyKind) run server
-  where
-  run request finished = handled request finished # liftEffect
+addRoute method path bodyKind handler = addServing method path bodyKind (sendingAff.serving handler)
 
-  handled request finished = launchAff_ do
-    result <- attempt (handler request)
-    liftEffect do
-      either (\_ -> sendFailureImpl request) pure result
-      finished
+addRouteIO :: String -> String -> BodyKind -> (RequestHandle -> IO Unit) -> Server -> Effect Unit
+addRouteIO method path bodyKind handler = addServing method path bodyKind (sendingIO.serving handler)
+
+addServing :: String -> String -> BodyKind -> Serving -> Server -> Effect Unit
+addServing method path bodyKind serving server = addRouteImpl method path (bodyKindName bodyKind) serving server
+
+type Serving = RequestHandle -> Effect Unit -> IO Unit
+
+type Reply = { status :: Int, headers :: Object String, body :: Maybe Foreign }
+
+type Sending m =
+  { reply :: Reply -> RequestHandle -> m Unit
+  , serving :: (RequestHandle -> m Unit) -> Serving
+  }
+
+sendingAff :: Sending Aff
+sendingAff = { reply, serving }
+  where
+  reply response request = sendReply response request # liftEffect
+
+  serving handler request finished = handled # liftEffect
+    where
+    handled = launchAff_ do
+      result <- attempt (handler request)
+      liftEffect do
+        either (\_ -> sendFailureImpl request) pure result
+        finished
+
+sendingIO :: Sending IO
+sendingIO = { reply, serving }
+  where
+  reply response request = IO (sendReply response request)
+
+  serving handler request finished = do
+    handler request `catch` \_ -> IO (sendFailureImpl request)
+    IO finished
 
 -- | Bind the server and return the actual address. Supports ephemeral port 0. While it listens,
 -- | the server keeps the program running.
@@ -145,9 +185,23 @@ listen { host, port } server = do
   bound <- liftEffect (listenImpl Left Right (un Host host) (un Port port) server)
   either (throwError <<< error) pure bound
 
+listenIO :: ListenOptions -> Server -> IO BoundAddress
+listenIO { host, port } server = do
+  bound <- IO (listenImpl Left Right (un Host host) (un Port port) server)
+  either (throwIO <<< error) pure bound
+
 -- | Stop accepting connections and wait for the requests in flight.
 close :: Server -> Aff Unit
 close server = makeAff \done -> closeImpl server (done (Right unit)) $> nonCanceler
+
+closeIO :: Server -> IO Unit
+closeIO server = do
+  closed <- newEmptyMVar
+  IO (closeImpl server (signal closed))
+  takeMVar closed
+  where
+  signal closed = case putMVar closed unit of
+    IO effect -> effect
 
 requestData :: RequestHandle -> RequestData
 requestData request =
@@ -166,20 +220,22 @@ requestData request =
 -- | Answer with the status, headers and body: a string body is plain text, `null` and
 -- | `undefined` send no body, anything else is JSON.
 sendResponse :: Int -> Object String -> Foreign -> RequestHandle -> Aff Unit
-sendResponse status headers body request = liftEffect case typeOf body of
-  "string" -> send true (unsafeFromForeign body) "text/plain; charset=utf-8"
-  _
-    | isNull body || isUndefined body -> send false "" ""
-    | otherwise -> send true (unsafeStringify body) "application/json; charset=utf-8"
-  where
-  send hasBody text defaultType = sendResponseImpl status (map fst entries) (map snd entries) hasBody text defaultType request
-  entries = Object.toUnfoldable headers :: Array (String /\ String)
+sendResponse status headers body = sendingAff.reply { status, headers, body: Just body }
 
 -- | Answer with the status and headers only.
 sendResponseWithoutBody :: Int -> Object String -> RequestHandle -> Aff Unit
-sendResponseWithoutBody status headers request =
-  liftEffect (sendResponseImpl status (map fst entries) (map snd entries) false "" "" request)
+sendResponseWithoutBody status headers = sendingAff.reply { status, headers, body: Nothing }
+
+sendReply :: Reply -> RequestHandle -> Effect Unit
+sendReply { status, headers, body } request = case body of
+  Nothing -> send false "" ""
+  Just value -> case typeOf value of
+    "string" -> send true (unsafeFromForeign value) "text/plain; charset=utf-8"
+    _
+      | isNull value || isUndefined value -> send false "" ""
+      | otherwise -> send true (unsafeStringify value) "application/json; charset=utf-8"
   where
+  send hasBody text defaultType = sendResponseImpl status (map fst entries) (map snd entries) hasBody text defaultType request
   entries = Object.toUnfoldable headers :: Array (String /\ String)
 
 object :: Array String -> Array String -> Object String
