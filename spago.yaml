@@ -24,8 +24,8 @@ package:
     - variant: ">=8.0.0 <9.0.0"
     - yoga-http-api: ">=0.3.4 <0.4.0"
     - yoga-json: ">=5.2.2 <6.0.0"
-    - yoga-om: ">=1.5.2 <2.0.0"
-    - yoga-om-layer: ">=1.2.2 <2.0.0"
+    - yoga-om: ">=1.5.2 <3.0.0"
+    - yoga-om-layer: ">=1.2.2 <3.0.0"
   test:
     main: Test.Main
     dependencies:
@@ -37,7 +37,7 @@ package:
       - go-io
       - go-os
   publish:
-    version: 0.1.1
+    version: 0.1.2
     license: MIT
     location:
       githubOwner: rowtype-yoga

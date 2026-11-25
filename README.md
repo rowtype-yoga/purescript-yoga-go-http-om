@@ -14,7 +14,7 @@ workspace:
   extraPackages:
     yoga-go-http-om:
       git: https://github.com/rowtype-yoga/purescript-yoga-go-http-om.git
-      ref: v0.1.1
+      ref: v0.1.2
     go-io:
       git: https://github.com/i-am-the-slime/purescript-go.git
       ref: v0.2.0
