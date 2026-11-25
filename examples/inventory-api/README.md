@@ -1,0 +1,105 @@
+# Inventory API
+
+A small shop's stock as a REST API, in one PureScript file that Iris turns into one Go binary.
+
+- Four routes, each a type that says what it reads and what it can answer: a path capture, a query
+  parameter, JSON bodies, and 200, 201, 400, 404 and 409 as the variants of its response row.
+- SKUs, names and quantities become newtypes the moment they arrive. A SKU in the path is parsed
+  by the route itself, so a handler never sees a bad one.
+- Errors are `reject @"conflict" { error: … }`: the compiler checks the route can answer that.
+- The stock is an `IORef (Map Sku Product)` that every handler gets from the Om context, and every
+  change is one atomic swap. Requests run on goroutines, on every core.
+
+```purescript
+type Sell = Route POST ("products" / "sku" : Sku / "sell")
+  { body :: JSON { quantity :: Int } }
+  (ok :: { body :: Product }, badRequest :: { body :: Problem }, notFound :: { body :: Problem }, conflict :: { body :: Problem })
+
+sell :: Handler Sell (inventory :: Inventory)
+sell = handle do
+  { path, body, inventory } <- ask
+  quantity <- parseStock body.quantity # orBadRequest
+  sale <- takeFromShelf path.sku quantity inventory # liftIO
+  case sale of
+    Sold product -> respond @"ok" product
+    OnlyLeft left -> reject @"conflict" { error: "only " <> show (un Stock left) <> " left" }
+    NotStocked -> reject @"notFound" (unknown path.sku)
+```
+
+The whole thing is [src/Main.purs](src/Main.purs).
+
+## Running it
+
+You need Iris 0.1.18-go.2 or newer and Go 1.27 (`brew install spago i-am-the-slime/tap/iris`).
+
+```bash
+cd examples/inventory-api
+iris run --go
+```
+
+It gets its packages from the
+[Go package set](https://github.com/rowtype-yoga/purescript-go-package-sets) `go-0.1.18-20261125.1`.
+
+```
+$ curl --json '{"sku":"WIDGET-1","name":"Widget","stock":12}' localhost:8070/products
+{"stock":12,"sku":"WIDGET-1","name":"Widget"}                                         201
+$ curl --json '{"sku":"WIDGET-1","name":"Widget again","stock":1}' localhost:8070/products
+{"error":"WIDGET-1 is already on the shelf"}                                          409
+$ curl --json '{"sku":"widget","name":"Widget","stock":1}' localhost:8070/products
+{"error":"a SKU is 3 to 16 of A-Z, 0-9 and -, not \"widget\""}                        400
+$ curl --json '{"sku":"GADGET-2","name":"  Gadget ","stock":3}' localhost:8070/products
+{"stock":3,"sku":"GADGET-2","name":"Gadget"}                                          201
+$ curl localhost:8070/products/NOPE-9
+{"error":"no product NOPE-9"}                                                         404
+$ curl localhost:8070/products/no
+{"error":"Invalid request","details":[{"field":"path","error":"Invalid path parameter 'sku': a SKU is 3 to 16 of A-Z, 0-9 and -, not \"no\""}]}   400
+$ curl 'localhost:8070/products?below=5'
+[{"stock":3,"sku":"GADGET-2","name":"Gadget"}]                                        200
+$ curl --json '{"quantity":5}' localhost:8070/products/WIDGET-1/sell
+{"stock":7,"sku":"WIDGET-1","name":"Widget"}                                          200
+$ curl --json '{"quantity":50}' localhost:8070/products/WIDGET-1/sell
+{"error":"only 7 left"}                                                               409
+$ curl --json '{"quantity":-2}' localhost:8070/products/WIDGET-1/sell
+{"error":"a quantity can't be negative, got -2"}                                      400
+```
+
+(The status codes on the right are from `curl -w`.)
+
+## Against Go by hand
+
+[go/main.go](go/main.go) is the same API with `net/http`, `encoding/json` and a `sync.Mutex`: the
+same routes, checks and answers, on port 8071. It's 184 lines of code against 120 here, and it
+does less: a body that doesn't parse gets a bare `Invalid request` instead of a list of what was
+wrong, and nothing stops a handler from answering with a status its route doesn't document.
+
+## How fast?
+
+Both servers stocked with the same 31 products, [oha](https://github.com/hatoo/oha) with 200
+connections for 10 seconds per route, the two servers taking turns, six runs each. Apple M5 Max,
+18 cores, Go 1.27, Iris 0.1.18-go.2. The machine was busy with other work while this ran (load
+average 20 to 45), so runs swung by up to 2×; the table has the best run of each, which is the
+one least disturbed:
+
+| | `GET /products/WIDGET-1` | `POST /products/WIDGET-1/sell` | `GET /products?below=10` |
+| --- | ---: | ---: | ---: |
+| this example | 115,167 req/s | 112,949 req/s | 99,033 req/s |
+| by hand, `net/http` | 131,958 req/s | 129,106 req/s | 124,868 req/s |
+| | 87% | 87% | 79% |
+
+The list is the slowest one: the map becomes a list and then an array before it's filtered and
+turned into JSON. On a quiet machine the library's own benchmark answers at 90 to 99% of
+`net/http` ([How fast?](../../README.md#how-fast)); expect these to land closer to that too.
+
+To run it yourself:
+
+```bash
+iris go                                      # prints where the binary is
+(cd go && go build -o ../.spago/by-hand .)
+.spago/go/inventory-api/bin/inventory-api & .spago/by-hand &
+for port in 8070 8071; do
+  curl -s --json '{"sku":"WIDGET-1","name":"Widget","stock":2000000000}' localhost:$port/products
+done
+oha -z 10s -c 200 http://127.0.0.1:8070/products/WIDGET-1
+oha -z 10s -c 200 http://127.0.0.1:8071/products/WIDGET-1
+oha -z 10s -c 200 -m POST -H 'content-type: application/json' -d '{"quantity":1}' http://127.0.0.1:8070/products/WIDGET-1/sell
+```

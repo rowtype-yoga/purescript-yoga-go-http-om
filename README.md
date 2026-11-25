@@ -4,6 +4,10 @@ Typed `yoga-http-api` routes, served by Go's `net/http`. Compile with [Iris](htt
 (`brew install spago i-am-the-slime/tap/iris`)
 and your API is a single native binary.
 
+For a bigger taste, [examples/inventory-api](examples/inventory-api) is a typed REST API with
+JSON bodies, query parameters, domain newtypes, 400/404/409 answers and shared state, next to
+the same API written by hand with `net/http`, and how fast each one is.
+
 ## Installing
 
 It's not on the registry yet, so add it and [purescript-go](https://github.com/i-am-the-slime/purescript-go)'s

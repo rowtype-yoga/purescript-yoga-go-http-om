@@ -1,0 +1,22 @@
+package:
+  name: inventory-api
+  dependencies:
+    - arrays
+    - either
+    - foldable-traversable
+    - go-io
+    - maybe
+    - newtype
+    - ordered-collections
+    - prelude
+    - strings
+    - tuples
+    - yoga-go-http-om
+    - yoga-http-api
+    - yoga-json
+    - yoga-om
+  run:
+    main: Main
+workspace:
+  packageSet:
+    url: https://raw.githubusercontent.com/rowtype-yoga/purescript-go-package-sets/go-0.1.18-20261125.1/packages.json
