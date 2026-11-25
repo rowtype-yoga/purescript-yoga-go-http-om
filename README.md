@@ -13,8 +13,8 @@ It's not on the registry yet, so add it and [purescript-go](https://github.com/i
 workspace:
   extraPackages:
     yoga-go-http-om:
-      git: https://github.com/i-am-the-slime/purescript-yoga-go-http-om.git
-      ref: v0.1.0
+      git: https://github.com/rowtype-yoga/purescript-yoga-go-http-om.git
+      ref: v0.1.1
     go-io:
       git: https://github.com/i-am-the-slime/purescript-go.git
       ref: v0.2.0

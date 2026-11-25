@@ -37,10 +37,10 @@ package:
       - go-io
       - go-os
   publish:
-    version: 0.1.0
+    version: 0.1.1
     license: MIT
     location:
-      githubOwner: i-am-the-slime
+      githubOwner: rowtype-yoga
       githubRepo: purescript-yoga-go-http-om
 workspace:
   extraPackages:
