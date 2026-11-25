@@ -13,7 +13,7 @@ BIN="$HERE/bin"
 OUT="$HERE/out"
 mkdir -p "$RESULTS" "$BIN" "$OUT"
 
-printf 'module example.com/yoga-go-http-om-example\n\ngo 1.27.0\n\nrequire github.com/i-am-the-slime/iris-go v0.3.0\n' >"$OUT/go.mod"
+printf 'module example.com/yoga-go-http-om-example\n\ngo 1.27.0\n\nrequire github.com/i-am-the-slime/iris-go v0.6.0\n' >"$OUT/go.mod"
 (cd "$HERE/.." && "$IRIS" go -p yoga-go-http-om-example --entry Main.main "$OUT")
 (cd "$OUT" && go mod tidy && go build -buildvcs=false -o "$BIN/ps" .)
 (cd "$HERE" && go build -buildvcs=false -o "$BIN/hrjson" ./json && go build -buildvcs=false -o "$BIN/hrbytes" ./bytes)

@@ -1,7 +1,29 @@
 # purescript-yoga-go-http-om
 
-Typed `yoga-http-api` routes, served by Go's `net/http`. Compile with [Iris](https://github.com/i-am-the-slime/purescript-analyzer/tree/iris-go)
+Typed `yoga-http-api` routes, served by Go's `net/http`. Compile with [Iris](https://github.com/i-am-the-slime/iris-go-backend)
+(`brew install spago i-am-the-slime/tap/iris`)
 and your API is a single native binary.
+
+## Installing
+
+It's not on the registry yet, so add it and [purescript-go](https://github.com/i-am-the-slime/purescript-go)'s
+`go-io` to your `spago.yaml` from GitHub:
+
+```yaml
+workspace:
+  extraPackages:
+    yoga-go-http-om:
+      git: https://github.com/i-am-the-slime/purescript-yoga-go-http-om.git
+      ref: v0.1.0
+    go-io:
+      git: https://github.com/i-am-the-slime/purescript-go.git
+      ref: v0.2.0
+      subdir: packages/go-io
+```
+
+You need Iris 0.1.18-go.2 or newer and Go 1.27.
+
+## Hello API
 
 ```purescript
 module Main where
@@ -38,9 +60,10 @@ main = do
 ```
 
 ```bash
-iris go --entry Main.main out
-cd out && go build -o api . && ./api
+iris run --go
 ```
+
+`iris go` without a directory builds the same binary and prints where it put it.
 
 ```
 $ curl localhost:8080/users/42
