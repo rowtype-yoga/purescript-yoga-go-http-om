@@ -26,7 +26,7 @@ type RequestHandle = *handle
 
 type BoundAddress struct {
 	Address string
-	Port    int32
+	Port    int
 }
 
 type server struct {
@@ -77,7 +77,7 @@ type handle struct {
 	sent         atomic.Bool
 }
 
-func CreateServerImpl(maxBodyBytes int32, headersMilliseconds, requestMilliseconds, keepAliveMilliseconds float64) *server {
+func CreateServerImpl(maxBodyBytes int, headersMilliseconds, requestMilliseconds, keepAliveMilliseconds float64) *server {
 	return &server{
 		maxBodyBytes:   int64(maxBodyBytes),
 		headersTimeout: milliseconds(headersMilliseconds),
@@ -109,8 +109,8 @@ func AddRouteImpl(method string, pattern string, bodyKind string, handler func(*
 
 // ListenImpl binds the address and serves in the background. The server keeps the program alive
 // until CloseImpl.
-func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host string, port int32, s *server) R {
-	listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(int(port))))
+func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host string, port int, s *server) R {
+	listener, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err != nil {
 		return failed(err.Error())
 	}
@@ -124,7 +124,7 @@ func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host s
 	s.retire = eventloop.Hold()
 	go s.http.Serve(listener)
 	address := listener.Addr().(*net.TCPAddr)
-	return bound(BoundAddress{Address: address.IP.String(), Port: int32(address.Port)})
+	return bound(BoundAddress{Address: address.IP.String(), Port: address.Port})
 }
 
 // CloseImpl stops accepting connections, closes the ones that never sent a request, waits for the
@@ -192,7 +192,7 @@ func BodyPresentImpl(h *handle) bool        { return h.bodyPresent }
 
 // SendResponseImpl writes the status, headers and body. A body is written only when hasBody and
 // the status allows one; defaultType is the content type when the headers name none.
-func SendResponseImpl(status int32, names []string, values []string, hasBody bool, body string, defaultType string, h *handle) {
+func SendResponseImpl(status int, names []string, values []string, hasBody bool, body string, defaultType string, h *handle) {
 	if !h.sent.CompareAndSwap(false, true) {
 		return
 	}
@@ -206,13 +206,13 @@ func SendResponseImpl(status int32, names []string, values []string, hasBody boo
 	}
 	forbidsBody := status < 200 || status == 204 || status == 304
 	if forbidsBody || !hasBody {
-		h.writer.WriteHeader(int(status))
+		h.writer.WriteHeader(status)
 		return
 	}
 	if !typed {
 		header.Set("Content-Type", defaultType)
 	}
-	h.writer.WriteHeader(int(status))
+	h.writer.WriteHeader(status)
 	io.WriteString(h.writer, body)
 }
 

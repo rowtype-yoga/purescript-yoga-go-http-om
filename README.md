@@ -18,14 +18,14 @@ workspace:
   extraPackages:
     yoga-go-http-om:
       git: https://github.com/rowtype-yoga/purescript-yoga-go-http-om.git
-      ref: v0.1.2
+      ref: v0.2.0
     go-io:
       git: https://github.com/i-am-the-slime/purescript-go.git
-      ref: v0.2.0
+      ref: v0.3.0
       subdir: packages/go-io
 ```
 
-You need googoo 0.1.18-go.3 or newer and Go 1.27.
+You need googoo 0.1.18-go.5 or newer and Go 1.27.
 
 ## Hello API
 

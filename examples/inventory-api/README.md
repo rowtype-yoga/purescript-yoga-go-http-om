@@ -30,7 +30,7 @@ The whole thing is [src/Main.purs](src/Main.purs).
 
 ## Running it
 
-You need googoo 0.1.18-go.3 or newer and Go 1.27 (`brew install spago i-am-the-slime/tap/googoo`).
+You need googoo 0.1.18-go.5 or newer and Go 1.27 (`brew install spago i-am-the-slime/tap/googoo`).
 
 ```bash
 cd examples/inventory-api
@@ -38,7 +38,7 @@ googoo run --go
 ```
 
 It gets its packages from the
-[Go package set](https://github.com/rowtype-yoga/purescript-go-package-sets) `go-0.1.18-20261126`.
+[Go package set](https://github.com/rowtype-yoga/purescript-go-package-sets) `go-0.1.18-20261126.3`.
 
 ```
 $ curl --json '{"sku":"WIDGET-1","name":"Widget","stock":12}' localhost:8070/products
