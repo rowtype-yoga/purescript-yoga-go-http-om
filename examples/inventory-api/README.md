@@ -1,6 +1,6 @@
 # Inventory API
 
-A small shop's stock as a REST API, in one PureScript file that Iris turns into one Go binary.
+A small shop's stock as a REST API, in one PureScript file that googoo turns into one Go binary.
 
 - Four routes, each a type that says what it reads and what it can answer: a path capture, a query
   parameter, JSON bodies, and 200, 201, 400, 404 and 409 as the variants of its response row.
@@ -30,15 +30,15 @@ The whole thing is [src/Main.purs](src/Main.purs).
 
 ## Running it
 
-You need Iris 0.1.18-go.2 or newer and Go 1.27 (`brew install spago i-am-the-slime/tap/iris`).
+You need googoo 0.1.18-go.3 or newer and Go 1.27 (`brew install spago i-am-the-slime/tap/googoo`).
 
 ```bash
 cd examples/inventory-api
-iris run --go
+googoo run --go
 ```
 
 It gets its packages from the
-[Go package set](https://github.com/rowtype-yoga/purescript-go-package-sets) `go-0.1.18-20261125.1`.
+[Go package set](https://github.com/rowtype-yoga/purescript-go-package-sets) `go-0.1.18-20261126`.
 
 ```
 $ curl --json '{"sku":"WIDGET-1","name":"Widget","stock":12}' localhost:8070/products
@@ -93,7 +93,7 @@ turned into JSON. On a quiet machine the library's own benchmark answers at 90 t
 To run it yourself:
 
 ```bash
-iris go                                      # prints where the binary is
+googoo go                                    # prints where the binary is
 (cd go && go build -o ../.spago/by-hand .)
 .spago/go/inventory-api/bin/inventory-api & .spago/by-hand &
 for port in 8070 8071; do
@@ -103,3 +103,17 @@ oha -z 10s -c 200 http://127.0.0.1:8070/products/WIDGET-1
 oha -z 10s -c 200 http://127.0.0.1:8071/products/WIDGET-1
 oha -z 10s -c 200 -m POST -H 'content-type: application/json' -d '{"quantity":1}' http://127.0.0.1:8070/products/WIDGET-1/sell
 ```
+
+## The Go googoo writes
+
+`googoo go out` puts the Go for this API in `out/`. With 0.1.18-go.3 it reads more like Go than it
+did with 0.1.18-go.2:
+
+| | 0.1.18-go.2 | 0.1.18-go.3 |
+| --- | --- | --- |
+| `switch either` | 7 | 1 |
+| average function name | 29.8 characters | 23.3 characters |
+| function names of 30 characters or more | 54 | 34 |
+| longest function name | 72 characters | 62 characters |
+
+A handler that rejects returns `(value, err)` now, so there's hardly an `Either` left to switch on.

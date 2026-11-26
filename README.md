@@ -1,7 +1,7 @@
 # purescript-yoga-go-http-om
 
-Typed `yoga-http-api` routes, served by Go's `net/http`. Compile with [Iris](https://github.com/i-am-the-slime/iris-go-backend)
-(`brew install spago i-am-the-slime/tap/iris`)
+Typed `yoga-http-api` routes, served by Go's `net/http`. Compile with [googoo](https://github.com/i-am-the-slime/iris-go-backend)
+(`brew install spago i-am-the-slime/tap/googoo`)
 and your API is a single native binary.
 
 For a bigger taste, [examples/inventory-api](examples/inventory-api) is a typed REST API with
@@ -25,7 +25,7 @@ workspace:
       subdir: packages/go-io
 ```
 
-You need Iris 0.1.18-go.2 or newer and Go 1.27.
+You need googoo 0.1.18-go.3 or newer and Go 1.27.
 
 ## Hello API
 
@@ -64,10 +64,10 @@ main = do
 ```
 
 ```bash
-iris run --go
+googoo run --go
 ```
 
-`iris go` without a directory builds the same binary and prints where it put it.
+`googoo go` without a directory builds the same binary and prints where it put it.
 
 ```
 $ curl localhost:8080/users/42
@@ -151,4 +151,4 @@ bench/bench.sh && bench/summarize.sh
 ./test.sh
 ```
 
-compiles the specs with Iris and runs them against a real server.
+compiles the specs with googoo and runs them against a real server.
