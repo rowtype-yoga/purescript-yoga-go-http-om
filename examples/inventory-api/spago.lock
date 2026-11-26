@@ -28,7 +28,7 @@
     },
     "package_set": {
       "address": {
-        "url": "https://raw.githubusercontent.com/rowtype-yoga/purescript-go-package-sets/go-0.1.18-20261126/packages.json"
+        "url": "https://raw.githubusercontent.com/rowtype-yoga/purescript-go-package-sets/go-0.1.18-20261126.3/packages.json"
       },
       "compiler": ">=0.15.15 <0.16.0",
       "content": {
@@ -39,6 +39,41 @@
         "arrays": "7.3.0",
         "avar": "5.0.1",
         "bifunctors": "6.1.0",
+        "bubbles": {
+          "git": "https://github.com/i-am-the-slime/purescript-bubbles.git",
+          "ref": "v0.2.0",
+          "dependencies": [
+            "arrays",
+            "bubbletea",
+            "datetime",
+            "lipgloss",
+            "maybe",
+            "newtype",
+            "prelude",
+            "tuples"
+          ]
+        },
+        "bubbletea": {
+          "git": "https://github.com/i-am-the-slime/purescript-bubbletea.git",
+          "ref": "v0.3.0",
+          "dependencies": [
+            "arrays",
+            "datetime",
+            "effect",
+            "either",
+            "exceptions",
+            "foldable-traversable",
+            "go-io",
+            "integers",
+            "lipgloss",
+            "maybe",
+            "newtype",
+            "prelude",
+            "strings",
+            "transformers",
+            "tuples"
+          ]
+        },
         "catenable-lists": "7.0.0",
         "console": "6.1.0",
         "const": "6.0.0",
@@ -59,9 +94,17 @@
         "functions": "6.0.0",
         "functors": "5.0.0",
         "gen": "4.0.0",
+        "glamour": {
+          "git": "https://github.com/i-am-the-slime/purescript-glamour.git",
+          "ref": "v0.2.0",
+          "dependencies": [
+            "either",
+            "prelude"
+          ]
+        },
         "go-bytes": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-bytes",
           "dependencies": [
             "newtype",
@@ -70,7 +113,7 @@
         },
         "go-exec": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-exec",
           "dependencies": [
             "aff",
@@ -87,7 +130,7 @@
         },
         "go-http": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-http",
           "dependencies": [
             "aff",
@@ -102,7 +145,7 @@
         },
         "go-io": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-io",
           "dependencies": [
             "aff",
@@ -125,7 +168,7 @@
         },
         "go-os": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-os",
           "dependencies": [
             "aff",
@@ -143,7 +186,7 @@
         },
         "go-time": {
           "git": "https://github.com/i-am-the-slime/purescript-go.git",
-          "ref": "v0.2.0",
+          "ref": "v0.3.0",
           "subdir": "packages/go-time",
           "dependencies": [
             "datetime",
@@ -156,7 +199,28 @@
             "prelude"
           ]
         },
+        "harmonica": {
+          "git": "https://github.com/i-am-the-slime/purescript-harmonica.git",
+          "ref": "v0.2.0",
+          "dependencies": [
+            "prelude"
+          ]
+        },
         "heterogeneous": "0.7.0",
+        "huh": {
+          "git": "https://github.com/i-am-the-slime/purescript-huh.git",
+          "ref": "v0.2.0",
+          "dependencies": [
+            "arrays",
+            "bubbletea",
+            "effect",
+            "exceptions",
+            "go-io",
+            "maybe",
+            "prelude",
+            "tuples"
+          ]
+        },
         "identity": "6.0.0",
         "int64": "3.0.0",
         "integers": "6.0.0",
@@ -166,6 +230,17 @@
         "js-promise": "1.0.0",
         "js-promise-aff": "1.0.0",
         "lazy": "6.0.0",
+        "lipgloss": {
+          "git": "https://github.com/i-am-the-slime/purescript-lipgloss.git",
+          "ref": "v0.2.0",
+          "dependencies": [
+            "arrays",
+            "foldable-traversable",
+            "newtype",
+            "prelude",
+            "strings"
+          ]
+        },
         "lists": "7.0.0",
         "literals": "1.0.2",
         "maybe": "6.0.0",
@@ -204,7 +279,7 @@
         "variant": "8.0.0",
         "yoga-connect": {
           "git": "https://github.com/rowtype-yoga/purescript-yoga-connect.git",
-          "ref": "v0.1.1",
+          "ref": "v0.2.0",
           "subdir": "packages/yoga-connect",
           "dependencies": [
             "maybe",
@@ -215,7 +290,7 @@
         },
         "yoga-connect-go": {
           "git": "https://github.com/rowtype-yoga/purescript-yoga-connect.git",
-          "ref": "v0.1.1",
+          "ref": "v0.2.0",
           "subdir": "packages/yoga-connect-go",
           "dependencies": [
             "arrays",
@@ -239,7 +314,7 @@
         },
         "yoga-go-http-om": {
           "git": "https://github.com/rowtype-yoga/purescript-yoga-go-http-om.git",
-          "ref": "v0.1.2",
+          "ref": "v0.2.0",
           "dependencies": [
             "aff",
             "arrays",
@@ -275,7 +350,7 @@
         "yoga-options": "0.1.1",
         "yoga-protobuf": {
           "git": "https://github.com/rowtype-yoga/purescript-yoga-protobuf.git",
-          "ref": "v0.1.0",
+          "ref": "v0.2.0",
           "dependencies": [
             "arrays",
             "effect",
@@ -293,7 +368,7 @@
         },
         "yoga-strom-io": {
           "git": "https://github.com/rowtype-yoga/purescript-yoga-connect.git",
-          "ref": "v0.1.1",
+          "ref": "v0.2.0",
           "subdir": "packages/yoga-strom-io",
           "dependencies": [
             "arrays",
@@ -681,7 +756,7 @@
     "go-io": {
       "type": "git",
       "url": "https://github.com/i-am-the-slime/purescript-go.git",
-      "rev": "9d97993edc0e42166b1135e7a48e6fdb0890c47a",
+      "rev": "30228bf274081dcb730b5238c1c00f3fc2363c4c",
       "subdir": "packages/go-io",
       "dependencies": [
         "aff",
@@ -1207,7 +1282,7 @@
     "yoga-go-http-om": {
       "type": "git",
       "url": "https://github.com/rowtype-yoga/purescript-yoga-go-http-om.git",
-      "rev": "fa04f4b0b8724ff8225ab31d1a58d9a97a40b58a",
+      "rev": "33ca06e8b9dc118d750cbc5cc183c88b6b985f12",
       "dependencies": [
         "aff",
         "arrays",

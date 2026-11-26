@@ -75,20 +75,18 @@ wrong, and nothing stops a handler from answering with a status its route doesn'
 ## How fast?
 
 Both servers stocked with the same 31 products, [oha](https://github.com/hatoo/oha) with 200
-connections for 10 seconds per route, the two servers taking turns, six runs each. Apple M5 Max,
-18 cores, Go 1.27, Iris 0.1.18-go.2. The machine was busy with other work while this ran (load
-average 20 to 45), so runs swung by up to 2×; the table has the best run of each, which is the
-one least disturbed:
+connections for 10 seconds per route, the two servers taking turns, three runs each. Apple M5 Max,
+18 cores, Go 1.27, googoo 0.1.18-go.5. The machine was quiet before it started (load average
+3.5), the table has the best run of each:
 
 | | `GET /products/WIDGET-1` | `POST /products/WIDGET-1/sell` | `GET /products?below=10` |
 | --- | ---: | ---: | ---: |
-| this example | 115,167 req/s | 112,949 req/s | 99,033 req/s |
-| by hand, `net/http` | 131,958 req/s | 129,106 req/s | 124,868 req/s |
-| | 87% | 87% | 79% |
+| this example | 136,474 req/s | 134,033 req/s | 105,424 req/s |
+| by hand, `net/http` | 137,414 req/s | 134,033 req/s | 125,167 req/s |
+| | 99% | 100% | 84% |
 
-The list is the slowest one: the map becomes a list and then an array before it's filtered and
-turned into JSON. On a quiet machine the library's own benchmark answers at 90 to 99% of
-`net/http` ([How fast?](../../README.md#how-fast)); expect these to land closer to that too.
+Looking up and selling are as fast as `net/http`. The list is the slow one: the map becomes a list
+and then an array before it's filtered and turned into JSON.
 
 To run it yourself:
 
@@ -106,14 +104,13 @@ oha -z 10s -c 200 -m POST -H 'content-type: application/json' -d '{"quantity":1}
 
 ## The Go googoo writes
 
-`googoo go out` puts the Go for this API in `out/`. With 0.1.18-go.3 it reads more like Go than it
-did with 0.1.18-go.2:
+`googoo go out` puts the Go for this API in `out/`. Each release made it read more like Go:
 
-| | 0.1.18-go.2 | 0.1.18-go.3 |
-| --- | --- | --- |
-| `switch either` | 7 | 1 |
-| average function name | 29.8 characters | 23.3 characters |
-| function names of 30 characters or more | 54 | 34 |
-| longest function name | 72 characters | 62 characters |
+| | 0.1.18-go.2 | 0.1.18-go.3 | 0.1.18-go.5 |
+| --- | --- | --- | --- |
+| `switch either` | 7 | 1 | 0 |
+| average function name | 29.8 characters | 23.3 characters | 20.4 characters |
+| function names of 30 characters or more | 54 | 34 | 22 |
+| longest function name | 72 characters | 62 characters | 52 characters |
 
-A handler that rejects returns `(value, err)` now, so there's hardly an `Either` left to switch on.
+A handler that rejects returns `(value, err)`, so there's no `Either` left to switch on.
