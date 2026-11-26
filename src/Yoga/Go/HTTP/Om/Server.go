@@ -39,6 +39,9 @@ type server struct {
 	http           *http.Server
 	retire         func()
 	stopped        sync.Once
+	freshLock      sync.Mutex
+	fresh          map[net.Conn]struct{}
+	closing        bool
 }
 
 type route struct {
@@ -116,6 +119,7 @@ func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host s
 		ReadHeaderTimeout: s.headersTimeout,
 		ReadTimeout:       s.requestTimeout,
 		IdleTimeout:       s.keepAlive,
+		ConnState:         s.track,
 	}
 	s.retire = eventloop.Hold()
 	go s.http.Serve(listener)
@@ -123,12 +127,13 @@ func ListenImpl[R any](failed func(string) R, bound func(BoundAddress) R, host s
 	return bound(BoundAddress{Address: address.IP.String(), Port: int32(address.Port)})
 }
 
-// CloseImpl stops accepting connections, waits for the requests in flight, and then resumes the
-// fiber.
+// CloseImpl stops accepting connections, closes the ones that never sent a request, waits for the
+// requests in flight, and then resumes the fiber.
 func CloseImpl(s *server, finished func()) {
 	retire := eventloop.Hold()
 	go func() {
 		if s.http != nil {
+			s.closeFresh()
 			s.http.Shutdown(context.Background())
 		}
 		finished()
@@ -139,6 +144,36 @@ func CloseImpl(s *server, finished func()) {
 		})
 		retire()
 	}()
+}
+
+// track remembers connections that have not sent a request yet. http.Server.Shutdown only treats
+// those as idle once they are five seconds old, so a client that dialed a spare connection would
+// hold up closing.
+func (s *server) track(connection net.Conn, state http.ConnState) {
+	s.freshLock.Lock()
+	defer s.freshLock.Unlock()
+	if state != http.StateNew {
+		delete(s.fresh, connection)
+		return
+	}
+	if s.closing {
+		connection.Close()
+		return
+	}
+	if s.fresh == nil {
+		s.fresh = map[net.Conn]struct{}{}
+	}
+	s.fresh[connection] = struct{}{}
+}
+
+func (s *server) closeFresh() {
+	s.freshLock.Lock()
+	defer s.freshLock.Unlock()
+	s.closing = true
+	for connection := range s.fresh {
+		connection.Close()
+	}
+	s.fresh = nil
 }
 
 func PathNamesImpl(h *handle) []string      { return h.pathNames }
