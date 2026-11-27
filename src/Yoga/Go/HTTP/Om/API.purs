@@ -144,12 +144,13 @@ instance RegisterRunnersRL RL.Nil runners where
 
 instance
   ( IsSymbol label
-  , Row.Cons label RouteRunner rest runners
+  , TypeEquals runner RouteRunner
+  , Row.Cons label runner rest runners
   , RegisterRunnersRL tail runners
   ) =>
-  RegisterRunnersRL (RL.Cons label RouteRunner tail) runners where
+  RegisterRunnersRL (RL.Cons label runner tail) runners where
   registerRunnersRL _ runners server = do
-    register (Record.get (Proxy :: Proxy label) runners) server
+    register (to (Record.get (Proxy :: Proxy label) runners)) server
     registerRunnersRL (Proxy :: Proxy tail) runners server
 
 -- | Copies the fields of the row list out of a larger record.
